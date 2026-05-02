@@ -1,35 +1,54 @@
 from fastapi import FastAPI, Request, Response
+import datetime
 
 app = FastAPI()
 
+# Simulamos una pequeña base de datos en memoria para recordar qué patente envió cada usuario
+sesiones_usuarios = {}
+
 @app.get("/")
 async def home():
-    return {"status": "Domisa Online"}
+    return {"status": "Domisa LegalTech Pro"}
 
 @app.post("/analizar-multas")
 async def whatsapp_bot(request: Request):
-    try:
-        # Solo usamos request.form() una vez para evitar errores de lectura
-        form_data = await request.form()
-        mensaje_cliente = form_data.get("Body", "").strip().upper()
-        
-        # Lógica de respuesta profesional
-        if len(mensaje_cliente) >= 6:
+    form_data = await request.form()
+    usuario_id = form_data.get("From") # El número de celular del cliente
+    texto = form_data.get("Body", "").strip().upper()
+    
+    # 1. Si el usuario envía una patente (ej: ABCD12)
+    if len(texto) == 6:
+        sesiones_usuarios[usuario_id] = texto # Guardamos la patente que está consultando
+        respuesta = (
+            f"🚗 *Patente detectada:* {texto}\n\n"
+            "Para calcular si tus multas se pueden borrar, por favor dime:\n"
+            "*¿De qué año es la multa más antigua que tienes?* (Responde solo el año, ej: 2020)"
+        )
+
+    # 2. Si el usuario envía un año (4 dígitos)
+    elif texto.isdigit() and len(texto) == 4:
+        anio_multa = int(texto)
+        anio_actual = datetime.datetime.now().year
+        antiguedad = anio_actual - anio_multa
+        patente_guardada = sesiones_usuarios.get(usuario_id, "tu vehículo")
+
+        if antiguedad >= 3:
             respuesta = (
-                f"🚗 *DOMISA LEGALTECH*\n\n"
-                f"Analizando patente: *{mensaje_cliente}*\n"
-                f"✅ Hemos detectado multas que califican para borrado legal.\n"
-                f"💰 Ahorro estimado: *$133.000 CLP*\n\n"
-                f"Responde *GESTIONAR* para más detalles."
+                f"✅ *¡EXCELENTES NOTICIAS!*\n\n"
+                f"La multa del año {anio_multa} para la patente *{patente_guardada}* tiene {antiguedad} años.\n"
+                "⚖️ Según la Ley 18.287, esta multa ya *PRESCRIBIÓ*.\n\n"
+                "Podemos eliminarla de tu certificado. Responde *GESTIONAR* para hablar con un abogado de Domisa."
             )
         else:
-            respuesta = "👋 ¡Hola! Bienvenido a *Domisa*. Envíanos una patente (ej: ABCD12) para analizar tus multas."
+            respuesta = (
+                f"⚠️ *AVISO LEGAL*\n\n"
+                f"La multa es del año {anio_multa} ({antiguedad} años de antigüedad).\n"
+                "La ley exige al menos *3 años* para solicitar el borrado. Aún es muy reciente, pero podemos revisar si tiene errores de forma. ¿Deseas una revisión manual?"
+            )
+            
+    # 3. Respuesta por defecto
+    else:
+        respuesta = "👋 Bienvenido a *Domisa LegalTech*.\n\nEnvíame la *patente* del vehículo que quieres limpiar de multas."
 
-    except Exception as e:
-        # Si algo falla, enviamos una respuesta básica para no dejar a Twilio esperando
-        respuesta = "Hola, recibimos tu mensaje. Envía una patente para comenzar el análisis."
-
-    # Formato TwiML exacto (XML)
-    twiml_content = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{respuesta}</Message></Response>'
-    
-    return Response(content=twiml_content, media_type="application/xml")
+    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{respuesta}</Message></Response>'
+    return Response(content=twiml, media_type="application/xml")
