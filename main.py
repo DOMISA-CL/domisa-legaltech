@@ -1,39 +1,41 @@
 from fastapi import FastAPI, Request, Response
-from fastapi.middleware.cors import CORSMiddleware
+import datetime
 
 app = FastAPI()
 
-# Permitimos que servicios externos como Twilio hablen con tu servidor
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/")
-async def home():
-    return {"status": "Domisa Online"}
-
 @app.post("/analizar-multas")
 async def whatsapp_bot(request: Request):
-    # Intentamos obtener el mensaje de varias formas para no fallar
-    body = await request.body()
-    print(f"Datos recibidos: {body}") # Esto podrás verlo en los Logs de Render
+    form_data = await request.form()
+    # Limpiamos el mensaje (quitamos espacios y pasamos a mayúsculas)
+    texto = form_data.get("Body", "").strip().upper()
     
-    try:
-        # Extraemos el texto del mensaje
-        form_data = await request.form()
-        mensaje_cliente = form_data.get("Body", "HOLA").upper()
+    # 1. Lógica de respuesta: ¿Es una patente? (6 caracteres aprox)
+    if len(texto) >= 6 and len(texto) <= 7:
+        patente = texto
+        # Cálculo simulado: Supongamos 2 multas de TAG de 1 UTM cada una
+        valor_utm = 66500 
+        ahorro_estimado = valor_utm * 2 
         
-        respuesta = (
-            f"🚗 *DOMISA LEGALTECH*\n\n"
-            f"Recibimos tu mensaje: *{mensaje_cliente}*\n"
-            f"Estamos procesando los datos de tu patente. ⏳"
+        mensaje = (
+            f"⚖️ *AUDITORÍA LEGAL DOMISA*\n"
+            f"----------------------------------\n"
+            f"🔍 *Resultado para la patente:* {patente}\n\n"
+            f"✅ Hemos detectado multas que califican para *prescripción* (borrado legal por antigüedad).\n\n"
+            f"💰 *Ahorro estimado:* ${ahorro_estimado:,} CLP\n"
+            f"⏳ *Estado:* Pendiente de gestión\n\n"
+            f"----------------------------------\n"
+            f"Si deseas eliminar estas multas de tu certificado, responde con la palabra *GESTIONAR* y un asesor de Domisa te contactará en breve. 🇨🇱"
         )
-    except Exception:
-        respuesta = "¡Hola! Bienvenido a Domisa. Envíanos una patente para comenzar."
+    # 2. Si el cliente dice gracias o saluda
+    elif "HOLA" in texto or "GRACIAS" in texto:
+        mensaje = (
+            "👋 ¡Hola! Bienvenido a *Domisa LegalTech*.\n\n"
+            "Para analizar tus multas de TAG y vías exclusivas, por favor *envíame la patente* de tu vehículo (ej: ABCD12)."
+        )
+    # 3. Respuesta por defecto
+    else:
+        mensaje = "Para iniciar el análisis legal, por favor ingresa una patente válida de 6 caracteres. 🚗"
 
-    # Formato TwiML básico
-    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{respuesta}</Message></Response>'
+    # Empaquetado para WhatsApp
+    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{mensaje}</Message></Response>'
     return Response(content=twiml, media_type="application/xml")
