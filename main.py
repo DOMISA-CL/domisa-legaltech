@@ -1,34 +1,39 @@
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
-# --- ESTA ES LA PARTE QUE EVITA EL "NOT FOUND" ---
+# Permitimos que servicios externos como Twilio hablen con tu servidor
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 async def home():
-    return {"status": "Domisa LegalTech Online", "mensaje": "El servidor funciona correctamente"}
+    return {"status": "Domisa Online"}
 
-# --- ESTA ES LA PARTE QUE HABLA CON WHATSAPP ---
 @app.post("/analizar-multas")
 async def whatsapp_bot(request: Request):
-    form_data = await request.form()
-    texto = form_data.get("Body", "").strip().upper()
+    # Intentamos obtener el mensaje de varias formas para no fallar
+    body = await request.body()
+    print(f"Datos recibidos: {body}") # Esto podrás verlo en los Logs de Render
     
-    if len(texto) >= 6 and len(texto) <= 7:
-        patente = texto
-        valor_utm = 66500 
-        ahorro_estimado = valor_utm * 2 
+    try:
+        # Extraemos el texto del mensaje
+        form_data = await request.form()
+        mensaje_cliente = form_data.get("Body", "HOLA").upper()
         
-        mensaje = (
-            f"⚖️ *AUDITORÍA LEGAL DOMISA*\n"
-            f"----------------------------------\n"
-            f"🔍 *Resultado para la patente:* {patente}\n\n"
-            f"✅ Hemos detectado multas que califican para *prescripción*.\n\n"
-            f"💰 *Ahorro estimado:* ${ahorro_estimado:,} CLP\n\n"
-            f"----------------------------------\n"
-            f"Responde *GESTIONAR* y un asesor te contactará. 🇨🇱"
+        respuesta = (
+            f"🚗 *DOMISA LEGALTECH*\n\n"
+            f"Recibimos tu mensaje: *{mensaje_cliente}*\n"
+            f"Estamos procesando los datos de tu patente. ⏳"
         )
-    else:
-        mensaje = "👋 ¡Hola! Bienvenido a *Domisa LegalTech*. Envíame una patente (ej: ABCD12) para analizar tus multas."
+    except Exception:
+        respuesta = "¡Hola! Bienvenido a Domisa. Envíanos una patente para comenzar."
 
-    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{mensaje}</Message></Response>'
+    # Formato TwiML básico
+    twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{respuesta}</Message></Response>'
     return Response(content=twiml, media_type="application/xml")
