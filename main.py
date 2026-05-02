@@ -4,38 +4,36 @@ app = FastAPI()
 
 @app.get("/")
 async def home():
-    return {"status": "Servidor Domisa Funcionando"}
+    return {"status": "Domisa Online"}
 
 @app.post("/analizar-multas")
 async def whatsapp_bot(request: Request):
     try:
-        # 1. Obtenemos los datos de Twilio de forma segura
-        datos = await request.form()
-        # El campo 'Body' es el mensaje que tú escribes en WhatsApp
-        mensaje = datos.get("Body", "").strip().upper()
+        # Leemos los datos de Twilio de forma más compatible
+        form_data = await request.form()
         
-        # 2. Lógica simplificada
-        # Si el mensaje es un año (ej: 2019)
+        # Twilio envía el mensaje en el campo 'Body'
+        mensaje = form_data.get("Body", "").strip().upper()
+        
+        # LOGICA DE RESPUESTA
         if mensaje.isdigit() and len(mensaje) == 4:
             anio = int(mensaje)
             if anio <= 2023:
-                respuesta = f"✅ El año {anio} califica para borrado legal en Domisa. ¡Podemos eliminar esa multa!"
+                respuesta = f"✅ El año {anio} califica para borrado legal en Domisa. ¡Podemos gestionar tu caso!"
             else:
-                respuesta = f"⚠️ El año {anio} es muy reciente. La ley exige 3 años de antigüedad."
+                respuesta = f"⚠️ El año {anio} es muy reciente. La ley exige 3 años de antigüedad para la prescripción."
         
-        # Si el mensaje parece una patente (letras y números)
         elif len(mensaje) >= 6:
-            respuesta = f"🚗 Patente {mensaje} recibida. Ahora dime: ¿De qué año es la multa? (Ej: 2020)"
+            respuesta = f"🚗 Recibimos la patente {mensaje}. Ahora dime: ¿De qué año es la multa más antigua? (Ej: 2020)"
         
-        # Saludo inicial
         else:
-            respuesta = "👋 Bienvenido a Domisa. Para empezar, envíame una patente o un año de multa."
+            respuesta = "👋 Bienvenido a Domisa LegalTech. Para comenzar, envíame una patente o el año de tu multa."
 
     except Exception as e:
-        # Esto nos ayudará a ver el error real en los Logs de Render
-        print(f"Error detectado: {e}")
-        respuesta = "Error de lectura. Por favor, intenta enviando solo el año (ej: 2020)."
+        # ESTO ES CLAVE: Si vuelve a fallar, verás el porqué en los Logs de Render
+        print(f"DEBUG ERROR: {str(e)}")
+        respuesta = "Hubo un problema técnico. Por favor, intenta de nuevo en unos minutos."
 
-    # 3. Respuesta en formato XML para Twilio
+    # Respuesta TwiML
     twiml = f'<?xml version="1.0" encoding="UTF-8"?><Response><Message>{respuesta}</Message></Response>'
     return Response(content=twiml, media_type="application/xml")
